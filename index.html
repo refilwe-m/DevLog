@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>devlog — timesheet tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#12151b;
+    --surface:#1a1f27;
+    --surface2:#20262f;
+    --surface3:#262d38;
+    --border:#2b323e;
+    --text:#ecedf1;
+    --muted:#8891a0;
+    --muted2:#5f6673;
+    --accent:#ff6b35;
+    --accent-dim:#ff6b3522;
+    --good:#34d399;
+    --cat-analysis:#7c9cff;
+    --cat-development:#34d399;
+    --cat-meetings:#f472b6;
+    --cat-testing:#fbbf24;
+    --cat-onboarding:#38bdf8;
+    --radius:10px;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:var(--ink);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    -webkit-font-smoothing:antialiased;
+    padding:20px 16px 80px;
+    max-width:720px;
+    margin:0 auto;
+  }
+  .mono{font-family:'JetBrains Mono',monospace;}
+
+  /* header */
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:18px;
+  }
+  .wordmark{
+    font-family:'JetBrains Mono',monospace;
+    font-weight:800; font-size:19px; letter-spacing:-0.5px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .wordmark .dot{width:8px;height:8px;border-radius:50%;background:var(--accent); box-shadow:0 0 8px var(--accent);}
+  .date-badge{font-size:12px; color:var(--muted); font-family:'JetBrains Mono',monospace;}
+  .streak{
+    font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:600;
+    background:var(--surface2); border:1px solid var(--border); border-radius:20px;
+    padding:5px 11px; display:flex; align-items:center; gap:6px; color:var(--text);
+    white-space:nowrap;
+  }
+
+  /* nudge banner */
+  .nudge{
+    background:linear-gradient(90deg, var(--accent-dim), transparent);
+    border:1px solid #ff6b3540; border-left:3px solid var(--accent);
+    border-radius:var(--radius); padding:11px 14px; margin-bottom:16px;
+    font-size:13px; color:#ffcbab; display:none;
+  }
+  .nudge.show{display:block;}
+
+  /* card */
+  .card{
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); padding:16px; margin-bottom:14px;
+  }
+  .card-title{
+    font-size:11px; text-transform:uppercase; letter-spacing:1px;
+    color:var(--muted); font-weight:600; margin-bottom:12px;
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .card-title .sub{text-transform:none; letter-spacing:0; font-size:11px; color:var(--muted2);}
+
+  /* form controls */
+  input[type=text], textarea{
+    width:100%; background:var(--surface2); border:1px solid var(--border);
+    color:var(--text); border-radius:8px; padding:11px 12px; font-size:14px;
+    font-family:'Inter',sans-serif; outline:none;
+  }
+  input[type=text]:focus{border-color:var(--accent);}
+  ::placeholder{color:var(--muted2);}
+
+  .chip-row{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px;}
+  .chip{
+    font-size:12px; padding:7px 12px; border-radius:20px; cursor:pointer;
+    border:1px solid var(--border); background:var(--surface2); color:var(--muted);
+    font-weight:500; transition:all .12s ease; user-select:none;
+  }
+  .chip.active{color:#0d1015; border-color:transparent;}
+  .chip[data-cat="Analysis"].active{background:var(--cat-analysis);}
+  .chip[data-cat="Development"].active{background:var(--cat-development);}
+  .chip[data-cat="Meetings"].active{background:var(--cat-meetings);}
+  .chip[data-cat="Testing"].active{background:var(--cat-testing);}
+  .chip[data-cat="Onboarding"].active{background:var(--cat-onboarding);}
+  .chip.kind.active{background:var(--surface3); color:var(--text); border-color:var(--muted2);}
+
+  .row{display:flex; gap:8px; margin-top:10px;}
+  .btn{
+    font-family:'Inter',sans-serif; font-weight:600; font-size:13px;
+    padding:11px 16px; border-radius:8px; border:1px solid var(--border);
+    background:var(--surface2); color:var(--text); cursor:pointer; flex:1;
+    transition:transform .08s ease;
+  }
+  .btn:active{transform:scale(0.97);}
+  .btn.primary{background:var(--accent); color:#1a0d05; border-color:var(--accent);}
+  .btn.ghost{background:transparent;}
+  .btn.small{flex:none; padding:8px 12px; font-size:12px;}
+  .btn:disabled{opacity:.4; cursor:not-allowed;}
+
+  .dur-row{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px;}
+  .dur-btn{
+    font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:600;
+    padding:8px 10px; border-radius:8px; border:1px solid var(--border);
+    background:var(--surface2); color:var(--muted); cursor:pointer; min-width:48px; text-align:center;
+  }
+  .dur-btn.active{background:var(--text); color:var(--ink); border-color:var(--text);}
+
+  /* running sessions */
+  .session{
+    display:flex; align-items:center; gap:12px; padding:12px;
+    background:var(--surface2); border-radius:8px; margin-bottom:8px;
+    border-left:3px solid var(--accent);
+  }
+  .session .cat-dot{width:9px;height:9px;border-radius:50%; flex-shrink:0;}
+  .session .info{flex:1; min-width:0;}
+  .session .task{font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .session .meta{font-size:11px; color:var(--muted); font-family:'JetBrains Mono',monospace; margin-top:2px;}
+  .session .elapsed{font-family:'JetBrains Mono',monospace; font-weight:700; font-size:15px; color:var(--accent);}
+  .pulse{display:inline-block; width:6px;height:6px;border-radius:50%; background:var(--accent); margin-right:6px; animation:pulse 1.4s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;} 50%{opacity:.25;}}
+
+  /* log timeline */
+  .timeline{position:relative; padding-left:18px;}
+  .timeline::before{content:''; position:absolute; left:4px; top:6px; bottom:6px; width:1px; background:var(--border);}
+  .entry{position:relative; padding:10px 0 10px 16px; border-bottom:1px solid var(--border);}
+  .entry:last-child{border-bottom:none;}
+  .entry::before{
+    content:''; position:absolute; left:-18px; top:16px; width:9px; height:9px; border-radius:50%;
+    background:var(--dotcolor, var(--muted)); box-shadow:0 0 0 3px var(--ink);
+  }
+  .entry-top{display:flex; align-items:center; justify-content:space-between; gap:8px;}
+  .entry-task{font-size:13.5px; font-weight:600; line-height:1.35;}
+  .entry-del{background:none; border:none; color:var(--muted2); cursor:pointer; font-size:16px; padding:0 4px; flex-shrink:0;}
+  .entry-del:hover{color:var(--accent);}
+  .entry-meta{display:flex; align-items:center; gap:8px; margin-top:5px; flex-wrap:wrap;}
+  .tag{font-size:10.5px; font-family:'JetBrains Mono',monospace; padding:2px 7px; border-radius:5px; font-weight:600;}
+  .tag.cat{color:#0d1015;}
+  .tag.dur{background:var(--surface2); color:var(--text); border:1px solid var(--border);}
+  .tag.kind{background:transparent; color:var(--muted); border:1px solid var(--border);}
+  .tag.multi{background:transparent; color:var(--accent); border:1px solid #ff6b3555;}
+  .empty{color:var(--muted2); font-size:13px; padding:14px 0; text-align:center;}
+
+  /* totals */
+  .totals-bar{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
+  .totals-num{font-family:'JetBrains Mono',monospace; font-weight:700; font-size:20px;}
+  .progress-track{height:6px; background:var(--surface2); border-radius:3px; overflow:hidden; margin-top:4px;}
+  .progress-fill{height:100%; background:var(--accent); border-radius:3px; transition:width .3s ease;}
+
+  /* heatmap */
+  .heatmap{display:flex; gap:3px; overflow-x:auto; padding-bottom:4px;}
+  .heat-col{display:flex; flex-direction:column; gap:3px;}
+  .heat-cell{width:11px; height:11px; border-radius:3px; background:var(--surface2); flex-shrink:0;}
+  .heat-legend{display:flex; align-items:center; gap:4px; margin-top:8px; font-size:10px; color:var(--muted2); font-family:'JetBrains Mono',monospace;}
+
+  /* week bars */
+  .bar-row{display:flex; align-items:center; gap:10px; margin-bottom:9px;}
+  .bar-label{font-size:12px; width:82px; flex-shrink:0; color:var(--muted); font-weight:500;}
+  .bar-track{flex:1; height:16px; background:var(--surface2); border-radius:4px; overflow:hidden;}
+  .bar-fill{height:100%; border-radius:4px; transition:width .3s ease;}
+  .bar-val{font-family:'JetBrains Mono',monospace; font-size:11.5px; width:52px; text-align:right; color:var(--muted); flex-shrink:0;}
+
+  /* export */
+  .export-out{
+    background:var(--surface2); border:1px solid var(--border); border-radius:8px;
+    padding:12px; font-family:'JetBrains Mono',monospace; font-size:11.5px; white-space:pre-wrap;
+    color:var(--muted); max-height:220px; overflow-y:auto; margin-top:10px; line-height:1.6;
+  }
+  .toast{
+    position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+    background:var(--text); color:var(--ink); padding:10px 18px; border-radius:20px;
+    font-size:13px; font-weight:600; opacity:0; pointer-events:none; transition:opacity .2s ease;
+  }
+  .toast.show{opacity:1;}
+
+  select.kind-select{
+    background:var(--surface2); border:1px solid var(--border); color:var(--text);
+    border-radius:8px; padding:8px 10px; font-size:12px; font-family:'Inter',sans-serif;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wordmark"><span class="dot"></span>devlog</div>
+  <div style="display:flex; align-items:center; gap:8px;">
+    <div class="date-badge" id="todayLabel"></div>
+    <div class="streak" id="streakBadge">🔥 –</div>
+  </div>
+</header>
+
+<div class="nudge" id="nudgeBanner"></div>
+
+<!-- START TIMER -->
+<div class="card">
+  <div class="card-title">Start tracking <span class="sub">15-min rounding</span></div>
+  <input type="text" id="taskInput" placeholder="What are you working on?">
+  <div class="chip-row" id="catChips"></div>
+  <div class="row">
+    <select class="kind-select" id="kindSelect" style="flex:1;">
+      <option value="">Kind (optional)</option>
+      <option value="Bugfix">Bugfix</option>
+      <option value="Feature">Feature</option>
+      <option value="Other">Other</option>
+    </select>
+  </div>
+  <div class="row">
+    <button class="btn primary" id="startBtn">▶ Start timer</button>
+  </div>
+</div>
+
+<!-- RUNNING SESSIONS -->
+<div class="card" id="runningCard" style="display:none;">
+  <div class="card-title">Running now</div>
+  <div id="runningList"></div>
+</div>
+
+<!-- QUICK LOG PAST WORK -->
+<div class="card">
+  <div class="card-title">Log time already worked <span class="sub">forgot to start the timer?</span></div>
+  <input type="text" id="manualTask" placeholder="What did you work on?">
+  <div class="chip-row" id="manualCatChips"></div>
+  <div class="row">
+    <select class="kind-select" id="manualKindSelect" style="flex:1;">
+      <option value="">Kind (optional)</option>
+      <option value="Bugfix">Bugfix</option>
+      <option value="Feature">Feature</option>
+      <option value="Other">Other</option>
+    </select>
+  </div>
+  <div class="dur-row" id="durButtons"></div>
+  <div class="row">
+    <button class="btn primary" id="addManualBtn">+ Add to today's log</button>
+  </div>
+</div>
+
+<!-- DAY LOG (navigable) -->
+<div class="card">
+  <div class="card-title">
+    <span id="dayLogTitle">Today's log</span>
+    <span class="sub" id="dayLogSub"></span>
+  </div>
+  <div class="row" style="margin-top:0; margin-bottom:12px;">
+    <button class="btn small" id="dayPrevBtn">‹ Prev day</button>
+    <button class="btn small" id="dayTodayBtn">Today</button>
+    <button class="btn small" id="dayNextBtn">Next day ›</button>
+  </div>
+  <div class="totals-bar">
+    <div>
+      <div class="totals-num mono" id="todayTotal">0h 00m</div>
+      <div style="font-size:11px; color:var(--muted2);">of <span id="targetLabel">8h</span> target</div>
+    </div>
+  </div>
+  <div class="progress-track"><div class="progress-fill" id="todayProgress" style="width:0%;"></div></div>
+  <div class="timeline" id="todayTimeline" style="margin-top:14px;"></div>
+</div>
+
+<!-- STREAK HEATMAP -->
+<div class="card">
+  <div class="card-title">Consistency <span class="sub">last 35 days</span></div>
+  <div class="heatmap" id="heatmap"></div>
+  <div class="heat-legend"><span>less</span>
+    <div class="heat-cell" style="background:var(--surface2);"></div>
+    <div class="heat-cell" style="background:#ff6b3540;"></div>
+    <div class="heat-cell" style="background:#ff6b3580;"></div>
+    <div class="heat-cell" style="background:var(--accent);"></div>
+    <span>more</span>
+  </div>
+</div>
+
+<!-- WEEK SUMMARY -->
+<div class="card">
+  <div class="card-title">
+    <span id="weekTitle">This week by category</span>
+    <span class="sub" id="weekSub"></span>
+  </div>
+  <div class="row" style="margin-top:0; margin-bottom:12px;">
+    <button class="btn small" id="weekPrevBtn">‹ Prev week</button>
+    <button class="btn small" id="weekCurBtn">This week</button>
+    <button class="btn small" id="weekNextBtn">Next week ›</button>
+  </div>
+  <div id="weekBars"></div>
+  <div class="totals-bar" style="margin-top:10px;">
+    <div class="mono" style="font-size:12px; color:var(--muted);">Week total: <span id="weekGrandTotal" style="color:var(--text); font-weight:700;">0h 00m</span></div>
+  </div>
+</div>
+
+<!-- EXPORT -->
+<div class="card">
+  <div class="card-title">Copy for timesheet</div>
+  <div class="row">
+    <button class="btn small" id="exportTodayBtn">Viewed day</button>
+    <button class="btn small" id="exportWeekBtn">Viewed week</button>
+    <button class="btn ghost small" id="copyBtn" style="margin-left:auto;">Copy text</button>
+  </div>
+  <div class="export-out" id="exportOut">Pick a range above to preview your timesheet text.</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const CATS = ["Analysis","Development","Meetings","Testing","Onboarding"];
+const CAT_VARS = {Analysis:"--cat-analysis",Development:"--cat-development",Meetings:"--cat-meetings",Testing:"--cat-testing",Onboarding:"--cat-onboarding"};
+const DUR_OPTIONS = [15,30,45,60,90,120,180,240];
+
+let entries = [];       // {id,date,task,category,kind,startTs,endTs,durationMin,multitask}
+let running = [];       // {id,task,category,kind,startTs}
+let settings = { targetHoursPerDay: 8 };
+let selectedCat = "Development";
+let manualSelectedCat = "Development";
+let selectedDur = 60;
+let viewedDate = null;           // which day the "day log" card shows (set in init)
+let weekOffset = 0;              // 0 = this week, -1 = last week, etc.
+
+const $ = (id) => document.getElementById(id);
+const todayStr = () => fmtDate(new Date());
+function fmtDate(d){ const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const day=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${day}`; }
+function fmtTime(d){ return d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); }
+function minsToHM(mins){ const h=Math.floor(mins/60); const m=mins%60; return `${h}h ${String(m).padStart(2,'0')}m`; }
+function roundTo15(mins){ if(mins<=0) return 15; const r = Math.round(mins/15)*15; return Math.max(15, r); }
+
+function showToast(msg){
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 1800);
+}
+
+// ---------- STORAGE ----------
+async function loadAll(){
+  try{
+    const e = await window.storage.get('entries', false);
+    entries = e ? JSON.parse(e.value) : [];
+  }catch(err){ entries = []; }
+  try{
+    const r = await window.storage.get('running', false);
+    running = r ? JSON.parse(r.value) : [];
+  }catch(err){ running = []; }
+  try{
+    const s = await window.storage.get('settings', false);
+    settings = s ? JSON.parse(s.value) : { targetHoursPerDay: 8 };
+  }catch(err){ settings = { targetHoursPerDay: 8 }; }
+}
+async function saveEntries(){
+  try{ await window.storage.set('entries', JSON.stringify(entries), false); }
+  catch(err){ showToast("Couldn't save — try again"); }
+}
+async function saveRunning(){
+  try{ await window.storage.set('running', JSON.stringify(running), false); }
+  catch(err){ showToast("Couldn't save — try again"); }
+}
+
+// ---------- CHIPS ----------
+function buildChips(containerId, onPick, getSelected){
+  const el = $(containerId);
+  el.innerHTML = '';
+  CATS.forEach(cat=>{
+    const chip = document.createElement('div');
+    chip.className = 'chip' + (getSelected()===cat ? ' active':'');
+    chip.dataset.cat = cat;
+    chip.textContent = cat;
+    chip.style.setProperty('--chipcolor', `var(${CAT_VARS[cat]})`);
+    chip.onclick = ()=>{ onPick(cat); refreshChipStates(containerId, getSelected); };
+    el.appendChild(chip);
+  });
+}
+function refreshChipStates(containerId, getSelected){
+  document.querySelectorAll(`#${containerId} .chip`).forEach(c=>{
+    c.classList.toggle('active', c.dataset.cat === getSelected());
+  });
+}
+
+function buildDurButtons(){
+  const el = $('durButtons');
+  el.innerHTML = '';
+  DUR_OPTIONS.forEach(m=>{
+    const btn = document.createElement('div');
+    btn.className = 'dur-btn' + (selectedDur===m ? ' active':'');
+    btn.textContent = m>=60 ? `${(m/60).toFixed(m%60===0?0:1)}h` : `${m}m`;
+    btn.onclick = ()=>{ selectedDur = m; buildDurButtons(); };
+    el.appendChild(btn);
+  });
+}
+
+// ---------- ACTIONS ----------
+async function startTimer(){
+  const task = $('taskInput').value.trim();
+  if(!task){ showToast("Add a short task description first"); return; }
+  const kind = $('kindSelect').value;
+  if(running.length > 0){
+    running.forEach(r=> r.multitask = true);
+  }
+  const session = {
+    id: 'r'+Date.now(),
+    task, category: selectedCat, kind,
+    startTs: Date.now(),
+    multitask: running.length > 0
+  };
+  running.push(session);
+  await saveRunning();
+  $('taskInput').value = '';
+  $('kindSelect').value = '';
+  render();
+}
+
+async function stopTimer(id){
+  const idx = running.findIndex(r=>r.id===id);
+  if(idx===-1) return;
+  const s = running[idx];
+  const endTs = Date.now();
+  const rawMin = (endTs - s.startTs) / 60000;
+  const durationMin = roundTo15(rawMin);
+  entries.push({
+    id: 'e'+Date.now()+Math.floor(Math.random()*1000),
+    date: fmtDate(new Date(s.startTs)),
+    task: s.task, category: s.category, kind: s.kind || '',
+    startTs: s.startTs, endTs,
+    durationMin,
+    multitask: !!s.multitask
+  });
+  running.splice(idx,1);
+  await saveEntries();
+  await saveRunning();
+  render();
+  showToast(`Logged ${minsToHM(durationMin)} → ${s.category}`);
+}
+
+async function addManualEntry(){
+  const task = $('manualTask').value.trim();
+  if(!task){ showToast("Add a short task description first"); return; }
+  const kind = $('manualKindSelect').value;
+  const now = Date.now();
+  entries.push({
+    id: 'e'+Date.now()+Math.floor(Math.random()*1000),
+    date: todayStr(),
+    task, category: manualSelectedCat, kind,
+    startTs: now - selectedDur*60000, endTs: now,
+    durationMin: selectedDur,
+    multitask: false
+  });
+  await saveEntries();
+  $('manualTask').value = '';
+  $('manualKindSelect').value = '';
+  render();
+  showToast(`Added ${minsToHM(selectedDur)} → ${manualSelectedCat}`);
+}
+
+async function deleteEntry(id){
+  entries = entries.filter(e=>e.id!==id);
+  await saveEntries();
+  render();
+}
+
+// ---------- COMPUTATION ----------
+function entriesForDate(d){ return entries.filter(e=>e.date===d); }
+function totalMinsForDate(d){ return entriesForDate(d).reduce((s,e)=>s+e.durationMin,0); }
+
+function computeStreak(){
+  let streak = 0;
+  let cursor = new Date();
+  // if today has no entries yet, start counting from yesterday but don't break streak
+  if(totalMinsForDate(fmtDate(cursor)) === 0){
+    cursor.setDate(cursor.getDate()-1);
+  }
+  while(true){
+    const ds = fmtDate(cursor);
+    if(totalMinsForDate(ds) > 0){ streak++; cursor.setDate(cursor.getDate()-1); }
+    else break;
+  }
+  return streak;
+}
+
+function weekRange(offset){
+  offset = offset || 0;
+  const now = new Date();
+  const day = now.getDay(); // 0 sun
+  const diffToMon = (day===0? -6 : 1-day);
+  const monday = new Date(now); monday.setDate(now.getDate()+diffToMon+(offset*7)); monday.setHours(0,0,0,0);
+  const days = [];
+  for(let i=0;i<7;i++){ const d = new Date(monday); d.setDate(monday.getDate()+i); days.push(fmtDate(d)); }
+  return days;
+}
+
+// ---------- RENDER ----------
+function render(){
+  $('todayLabel').textContent = new Date().toLocaleDateString([], {weekday:'short', month:'short', day:'numeric'});
+  $('targetLabel').textContent = `${settings.targetHoursPerDay}h`;
+  $('streakBadge').innerHTML = `🔥 ${computeStreak()}d`;
+
+  // nudge
+  const hour = new Date().getHours();
+  const todayMins = totalMinsForDate(todayStr());
+  const nudge = $('nudgeBanner');
+  if(todayMins===0 && running.length===0 && hour>=14){
+    nudge.classList.add('show');
+    nudge.textContent = "Nothing logged for today yet — add something now while it's fresh, even a rough estimate beats none.";
+  } else if(running.length>0 && ((Date.now()-Math.min(...running.map(r=>r.startTs)))/3600000) > 3){
+    nudge.classList.add('show');
+    nudge.textContent = "A timer's been running for 3+ hours — stop and split it if you've switched tasks.";
+  } else {
+    nudge.classList.remove('show');
+  }
+
+  buildChips('catChips', (c)=>{selectedCat=c;}, ()=>selectedCat);
+  buildChips('manualCatChips', (c)=>{manualSelectedCat=c;}, ()=>manualSelectedCat);
+  buildDurButtons();
+
+  // running sessions
+  const runningCard = $('runningCard');
+  const runningList = $('runningList');
+  if(running.length===0){
+    runningCard.style.display = 'none';
+  } else {
+    runningCard.style.display = 'block';
+    runningList.innerHTML = '';
+    running.forEach(s=>{
+      const el = document.createElement('div');
+      el.className = 'session';
+      const elapsedMin = Math.floor((Date.now()-s.startTs)/60000);
+      const h = Math.floor(elapsedMin/60), m = elapsedMin%60;
+      el.innerHTML = `
+        <div class="cat-dot" style="background:var(${CAT_VARS[s.category]});"></div>
+        <div class="info">
+          <div class="task">${escapeHtml(s.task)}</div>
+          <div class="meta"><span class="pulse"></span>${s.category}${s.kind? ' · '+s.kind:''}${s.multitask? ' · multitask':''} · started ${fmtTime(new Date(s.startTs))}</div>
+        </div>
+        <div class="elapsed">${h}:${String(m).padStart(2,'0')}</div>
+        <button class="btn small" data-stop="${s.id}">Stop</button>
+      `;
+      runningList.appendChild(el);
+    });
+    runningList.querySelectorAll('[data-stop]').forEach(btn=>{
+      btn.onclick = ()=> stopTimer(btn.dataset.stop);
+    });
+  }
+
+  // day log (navigable)
+  const isToday = viewedDate === todayStr();
+  const viewedDObj = new Date(viewedDate+'T00:00:00');
+  $('dayLogTitle').textContent = isToday ? "Today's log" : viewedDObj.toLocaleDateString([], {weekday:'long', month:'short', day:'numeric'});
+  $('dayLogSub').textContent = isToday ? '' : viewedDate;
+  $('dayNextBtn').disabled = isToday;
+
+  const dayEntries = entriesForDate(viewedDate).sort((a,b)=>b.startTs-a.startTs);
+  const dayMins = totalMinsForDate(viewedDate);
+  const timeline = $('todayTimeline');
+  if(dayEntries.length===0){
+    timeline.innerHTML = isToday
+      ? '<div class="empty">No entries yet today — start a timer or log time above.</div>'
+      : '<div class="empty">Nothing logged this day.</div>';
+  } else {
+    timeline.innerHTML = '';
+    dayEntries.forEach(e=>{
+      const el = document.createElement('div');
+      el.className = 'entry';
+      el.style.setProperty('--dotcolor', `var(${CAT_VARS[e.category]})`);
+      el.innerHTML = `
+        <div class="entry-top">
+          <div class="entry-task">${escapeHtml(e.task)}</div>
+          <button class="entry-del" data-del="${e.id}">✕</button>
+        </div>
+        <div class="entry-meta">
+          <span class="tag cat" style="background:var(${CAT_VARS[e.category]});">${e.category}</span>
+          <span class="tag dur">${minsToHM(e.durationMin)}</span>
+          ${e.kind ? `<span class="tag kind">${e.kind}</span>` : ''}
+          ${e.multitask ? `<span class="tag multi">multitask</span>` : ''}
+          <span class="tag kind mono" style="border:none; color:var(--muted2);">${fmtTime(new Date(e.startTs))}–${fmtTime(new Date(e.endTs))}</span>
+        </div>
+      `;
+      timeline.appendChild(el);
+    });
+    timeline.querySelectorAll('[data-del]').forEach(btn=>{
+      btn.onclick = ()=> deleteEntry(btn.dataset.del);
+    });
+  }
+
+  const targetMin = settings.targetHoursPerDay*60;
+  $('todayTotal').textContent = minsToHM(dayMins);
+  $('todayProgress').style.width = Math.min(100, (dayMins/targetMin)*100) + '%';
+
+  // heatmap
+  const heat = $('heatmap');
+  heat.innerHTML = '';
+  const cellsPerCol = 5;
+  const totalDays = 35;
+  const start = new Date(); start.setDate(start.getDate() - (totalDays-1));
+  // align to start of week col
+  const startDow = (start.getDay()+6)%7; // mon=0
+  const cols = [];
+  let cursor = new Date(start); cursor.setDate(cursor.getDate()-startDow);
+  const totalCells = totalDays + startDow;
+  const numCols = Math.ceil(totalCells/cellsPerCol);
+  for(let c=0;c<numCols;c++){
+    const col = document.createElement('div'); col.className='heat-col';
+    for(let r=0;r<cellsPerCol;r++){
+      const ds = fmtDate(cursor);
+      const mins = totalMinsForDate(ds);
+      const cell = document.createElement('div'); cell.className='heat-cell';
+      let bg = 'var(--surface2)';
+      if(cursor <= new Date()){
+        if(mins>0 && mins<90) bg = '#ff6b3540';
+        else if(mins>=90 && mins<240) bg = '#ff6b3580';
+        else if(mins>=240) bg = 'var(--accent)';
+      }
+      cell.style.background = bg;
+      cell.title = `${ds}: ${minsToHM(mins)}`;
+      col.appendChild(cell);
+      cursor.setDate(cursor.getDate()+1);
+    }
+    cols.push(col);
+  }
+  cols.forEach(c=>heat.appendChild(c));
+
+  // week bars
+  const wk = weekRange(weekOffset);
+  const wkStart = new Date(wk[0]+'T00:00:00');
+  const wkEnd = new Date(wk[6]+'T00:00:00');
+  $('weekTitle').textContent = weekOffset===0 ? 'This week by category' : (weekOffset===-1 ? 'Last week by category' : 'Week by category');
+  $('weekSub').textContent = `${wkStart.toLocaleDateString([], {month:'short',day:'numeric'})} – ${wkEnd.toLocaleDateString([], {month:'short',day:'numeric'})}`;
+  $('weekNextBtn').disabled = weekOffset>=0;
+
+  const weekBars = $('weekBars');
+  weekBars.innerHTML = '';
+  const catTotals = {};
+  CATS.forEach(c=>catTotals[c]=0);
+  wk.forEach(ds=>{ entriesForDate(ds).forEach(e=>{ catTotals[e.category]+=e.durationMin; }); });
+  const maxVal = Math.max(60, ...Object.values(catTotals));
+  let weekGrand = 0;
+  CATS.forEach(cat=>{
+    const mins = catTotals[cat];
+    weekGrand += mins;
+    const row = document.createElement('div'); row.className='bar-row';
+    row.innerHTML = `
+      <div class="bar-label">${cat}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${(mins/maxVal)*100}%; background:var(${CAT_VARS[cat]});"></div></div>
+      <div class="bar-val mono">${mins>0?minsToHM(mins):'—'}</div>
+    `;
+    weekBars.appendChild(row);
+  });
+  $('weekGrandTotal').textContent = minsToHM(weekGrand);
+}
+
+function escapeHtml(str){
+  const d = document.createElement('div'); d.textContent = str; return d.innerHTML;
+}
+
+// ---------- EXPORT ----------
+function buildExportText(days){
+  let out = '';
+  let grandTotal = 0;
+  days.forEach(ds=>{
+    const dayEntries = entriesForDate(ds);
+    if(dayEntries.length===0) return;
+    const dObj = new Date(ds+'T00:00:00');
+    out += `${dObj.toLocaleDateString([], {weekday:'short', month:'short', day:'numeric'})}\n`;
+    const byCat = {};
+    dayEntries.forEach(e=>{
+      byCat[e.category] = byCat[e.category] || [];
+      byCat[e.category].push(e);
+    });
+    let dayTotal = 0;
+    Object.keys(byCat).forEach(cat=>{
+      const catMin = byCat[cat].reduce((s,e)=>s+e.durationMin,0);
+      dayTotal += catMin;
+      const tasks = byCat[cat].map(e=>`${e.kind?e.kind+': ':''}${e.task}`).join('; ');
+      out += `  - ${cat}: ${minsToHM(catMin)}  (${tasks})\n`;
+    });
+    out += `  Total: ${minsToHM(dayTotal)}\n\n`;
+    grandTotal += dayTotal;
+  });
+  out += `Grand total: ${minsToHM(grandTotal)}`;
+  return out.trim() ? out : 'Nothing logged for this range yet.';
+}
+
+$('exportTodayBtn').onclick = ()=>{
+  $('exportOut').textContent = buildExportText([viewedDate]);
+};
+$('exportWeekBtn').onclick = ()=>{
+  $('exportOut').textContent = buildExportText(weekRange(weekOffset));
+};
+
+$('dayPrevBtn').onclick = ()=>{
+  const d = new Date(viewedDate+'T00:00:00'); d.setDate(d.getDate()-1);
+  viewedDate = fmtDate(d); render();
+};
+$('dayNextBtn').onclick = ()=>{
+  const d = new Date(viewedDate+'T00:00:00'); d.setDate(d.getDate()+1);
+  viewedDate = fmtDate(d); render();
+};
+$('dayTodayBtn').onclick = ()=>{ viewedDate = todayStr(); render(); };
+
+$('weekPrevBtn').onclick = ()=>{ weekOffset--; render(); };
+$('weekNextBtn').onclick = ()=>{ if(weekOffset<0) weekOffset++; render(); };
+$('weekCurBtn').onclick = ()=>{ weekOffset = 0; render(); };
+$('copyBtn').onclick = async ()=>{
+  const text = $('exportOut').textContent;
+  try{
+    await navigator.clipboard.writeText(text);
+    showToast('Copied to clipboard');
+  }catch(err){
+    showToast("Couldn't copy — select and copy manually");
+  }
+};
+
+// ---------- INIT ----------
+$('startBtn').onclick = startTimer;
+$('addManualBtn').onclick = addManualEntry;
+
+let liveTicker = null;
+async function init(){
+  await loadAll();
+  viewedDate = todayStr();
+  render();
+  liveTicker = setInterval(()=>{ if(running.length>0) render(); }, 1000);
+}
+init();
+</script>
+</body>
+</html>
